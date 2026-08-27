@@ -577,6 +577,45 @@ fun PlayerMenu(
                                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                             )
                         }
+
+                        val primaryArtist = mediaMetadata.artists.firstOrNull { it.id != null }
+                        if (primaryArtist?.id != null) {
+                            val isPrimaryArtistBlocked by database.isArtistBlocked(primaryArtist.id).collectAsState(initial = false)
+                            HorizontalDivider(
+                                modifier = Modifier.padding(start = 56.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant,
+                            )
+                            ListItem(
+                                headlineContent = {
+                                    Text(
+                                        text = if (isPrimaryArtistBlocked) stringResource(R.string.unblock_artist) else stringResource(R.string.block_artist),
+                                        color = if (isPrimaryArtistBlocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                    )
+                                },
+                                leadingContent = {
+                                    Icon(
+                                        painter = painterResource(R.drawable.block),
+                                        contentDescription = null,
+                                        tint = if (isPrimaryArtistBlocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                    )
+                                },
+                                modifier = Modifier.clickable {
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        if (isPrimaryArtistBlocked) {
+                                            database.unblockArtist(primaryArtist.id)
+                                        } else {
+                                            database.blockArtist(
+                                                id = primaryArtist.id,
+                                                name = primaryArtist.name,
+                                                thumbnailUrl = primaryArtist.thumbnailUrl,
+                                            )
+                                        }
+                                    }
+                                    onDismiss()
+                                },
+                                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                            )
+                        }
                     }
                 }
             }

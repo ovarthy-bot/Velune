@@ -36,6 +36,7 @@ import com.nikhil.yt.db.entities.PlayCountEntity
 import com.nikhil.yt.db.entities.AlbumWithSongs
 import com.nikhil.yt.db.entities.Artist
 import com.nikhil.yt.db.entities.ArtistEntity
+import com.nikhil.yt.db.entities.BlockedArtistEntity
 import com.nikhil.yt.db.entities.Event
 import com.nikhil.yt.db.entities.EventWithSong
 import com.nikhil.yt.db.entities.FormatEntity
@@ -1660,4 +1661,38 @@ interface DatabaseDao {
 
     @Query("DELETE FROM song_skip WHERE songId = :songId")
     suspend fun deleteSkip(songId: String)
+
+    // ─── Artist Blacklist (Blocked Artists) ───────────────────────────────
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insert(blockedArtist: BlockedArtistEntity)
+
+    @Delete
+    fun delete(blockedArtist: BlockedArtistEntity)
+
+    @Query("DELETE FROM blocked_artist WHERE id = :id")
+    fun deleteBlockedArtist(id: String)
+
+    @Query("SELECT * FROM blocked_artist ORDER BY blockedAt DESC")
+    fun allBlockedArtists(): Flow<List<BlockedArtistEntity>>
+
+    @Query("SELECT id FROM blocked_artist")
+    fun allBlockedArtistIds(): Flow<List<String>>
+
+    @Query("SELECT id FROM blocked_artist")
+    fun allBlockedArtistIdsSync(): List<String>
+
+    @Query("SELECT EXISTS(SELECT 1 FROM blocked_artist WHERE id = :id)")
+    fun isArtistBlocked(id: String): Flow<Boolean>
+
+    @Query("SELECT EXISTS(SELECT 1 FROM blocked_artist WHERE id = :id)")
+    fun isArtistBlockedSync(id: String): Boolean
+
+    fun blockArtist(id: String, name: String, thumbnailUrl: String? = null) {
+        insert(BlockedArtistEntity(id = id, name = name, thumbnailUrl = thumbnailUrl))
+    }
+
+    fun unblockArtist(id: String) {
+        deleteBlockedArtist(id)
+    }
 }

@@ -618,4 +618,14 @@
     <string name="next">Sonraki</string>
     <string name="next_song">Sonraki Şarkı</string>
     <string name="allow">İzin ver</string>
+
+    <!-- Artist Blacklist -->
+    <string name="blocked_artists">Engellenen sanatçılar</string>
+    <string name="blocked_artists_desc">Önerilerden ve çalma listelerinden engellediğiniz sanatçıları yönetin</string>
+    <string name="block_artist">Sanatçıyı engelle</string>
+    <string name="unblock_artist">Engeli kaldır</string>
+    <string name="artist_blocked">Sanatçı engellendi</string>
+    <string name="artist_unblocked">Sanatçının engeli kaldırıldı</string>
+    <string name="no_blocked_artists">Engellenen sanatçı yok</string>
+    <string name="no_blocked_artists_desc">Engellediğiniz sanatçılar burada görünür. Parçaları arama, öneri veya çalma sırasında yer almaz.</string>
 </resources>

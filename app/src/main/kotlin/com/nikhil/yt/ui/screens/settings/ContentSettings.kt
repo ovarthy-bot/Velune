@@ -150,6 +150,13 @@ fun ContentSettings(
             onCheckedChange = onHideVideoChange,
         )
 
+        PreferenceEntry(
+            title = { Text(stringResource(R.string.blocked_artists)) },
+            description = stringResource(R.string.blocked_artists_desc),
+            icon = { Icon(painterResource(R.drawable.block), null) },
+            onClick = { navController.navigate("settings/blocked_artists") },
+        )
+
         PreferenceGroupTitle(title = stringResource(R.string.app_language))
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             PreferenceEntry(

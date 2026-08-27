@@ -41,6 +41,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -91,9 +92,27 @@ class HomeViewModel @Inject constructor(
         return chips?.filterNot { it.title.contains("podcasts", ignoreCase = true) }
     }
 
+    private fun isYtItemAllowed(item: YTItem, blockedIds: Set<String>): Boolean {
+        if (blockedIds.isEmpty()) return true
+        return when (item) {
+            is com.nikhil.yt.innertube.models.SongItem -> item.artists.none { it.id != null && it.id in blockedIds }
+            is com.nikhil.yt.innertube.models.ArtistItem -> item.id !in blockedIds
+            is com.nikhil.yt.innertube.models.AlbumItem -> item.artists.orEmpty().none { it.id != null && it.id in blockedIds }
+            else -> true
+        }
+    }
+
+    private fun isSongAllowed(song: Song, blockedIds: Set<String>): Boolean {
+        if (blockedIds.isEmpty()) return true
+        return song.artists.none { it.id in blockedIds }
+    }
+
     private suspend fun getQuickPicks(){
+        val blockedIds = withContext(Dispatchers.IO) { database.allBlockedArtistIdsSync().toSet() }
         when (quickPicksEnum.first()) {
-            QuickPicks.QUICK_PICKS -> quickPicks.value = database.quickPicks().first().shuffled().take(20)
+            QuickPicks.QUICK_PICKS -> quickPicks.value = database.quickPicks().first()
+                .filter { isSongAllowed(it, blockedIds) }
+                .shuffled().take(20)
             QuickPicks.LAST_LISTEN -> songLoad()
         }
     }
@@ -103,38 +122,49 @@ class HomeViewModel @Inject constructor(
         isLoading.value = true
         
         try {
+            val blockedIds = withContext(Dispatchers.IO) { database.allBlockedArtistIdsSync().toSet() }
             supervisorScope {
                 val hideExplicit = context.dataStore.get(HideExplicitKey, false)
                 val hideVideo = context.dataStore.get(HideVideoKey, false)
                 val fromTimeStamp = System.currentTimeMillis() - 86400000 * 7 * 2
 
                 launch { getQuickPicks() }
-                launch { forgottenFavorites.value = database.forgottenFavorites().first().shuffled().take(20) }
+                launch {
+                    forgottenFavorites.value = database.forgottenFavorites().first()
+                        .filter { isSongAllowed(it, blockedIds) }
+                        .shuffled().take(20)
+                }
                 launch {
                     try {
                         val hideExplicit = context.dataStore.get(HideExplicitKey, false)
                         val hideVideo = context.dataStore.get(HideVideoKey, false)
-                        forYouSuggestions.value = forYouEngine.getSuggestions(hideExplicit, hideVideo)
+                        val suggestions = forYouEngine.getSuggestions(hideExplicit, hideVideo)
+                        forYouSuggestions.value = suggestions?.filter { isYtItemAllowed(it, blockedIds) }
                     } catch (_: Exception) {}
                 }
                 
                 launch {
                     val keepListeningSongs = database.mostPlayedSongs(fromTimeStamp, limit = 15, offset = 5)
-                        .first().shuffled().take(10)
+                        .first().filter { isSongAllowed(it, blockedIds) }.shuffled().take(10)
                     val keepListeningAlbums = database.mostPlayedAlbums(fromTimeStamp, limit = 8, offset = 2)
-                        .first().filter { it.album.thumbnailUrl != null }.shuffled().take(5)
+                        .first().filter { it.album.thumbnailUrl != null && it.artists.none { a -> a.id in blockedIds } }.shuffled().take(5)
                     val keepListeningArtists = database.mostPlayedArtists(fromTimeStamp)
-                        .first().filter { it.artist.isYouTubeArtist && it.artist.thumbnailUrl != null }
+                        .first().filter { it.artist.isYouTubeArtist && it.artist.thumbnailUrl != null && it.id !in blockedIds }
                         .shuffled().take(5)
                     keepListening.value = (keepListeningSongs + keepListeningAlbums + keepListeningArtists).shuffled()
                 }
 
                 launch {
-                        YouTube.home().onSuccess { page ->
+                    YouTube.home().onSuccess { page ->
                         homePage.value = page.copy(
                             chips = filterHomeChips(page.chips),
                             sections = page.sections.map { section ->
-                                section.copy(items = section.items.filterExplicit(hideExplicit).filterVideo(hideVideo))
+                                section.copy(
+                                    items = section.items
+                                        .filterExplicit(hideExplicit)
+                                        .filterVideo(hideVideo)
+                                        .filter { isYtItemAllowed(it, blockedIds) }
+                                )
                             }
                         )
                     }.onFailure { reportException(it) }
@@ -156,6 +186,9 @@ class HomeViewModel @Inject constructor(
                         }
                         explorePage.value = page.copy(
                             newReleaseAlbums = page.newReleaseAlbums
+                                .filter { album ->
+                                    album.artists.orEmpty().none { it.id != null && it.id in blockedIds }
+                                }
                                 .sortedBy { album ->
                                     val artistIds = album.artists.orEmpty().mapNotNull { it.id }
                                     val firstArtistKey = artistIds.firstNotNullOfOrNull { artistId ->

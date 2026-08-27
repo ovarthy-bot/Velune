@@ -317,6 +317,9 @@ fun NavGraphBuilder.navigationBuilder(
     composable("settings/content") {
         ContentSettings(navController, scrollBehavior)
     }
+    composable("settings/blocked_artists") {
+        com.nikhil.yt.ui.screens.settings.BlockedArtistsScreen(navController, scrollBehavior)
+    }
     composable("settings/player") {
         PlayerSettings(navController, scrollBehavior)
     }

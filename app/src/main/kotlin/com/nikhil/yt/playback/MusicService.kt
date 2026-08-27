@@ -391,6 +391,8 @@ class MusicService :
     private var automixJob: Job? = null
     private var automixSeedMediaId: String? = null
 
+    val blockedArtistIds = MutableStateFlow<Set<String>>(emptySet())
+
     val autoAddedMediaIds: MutableSet<String> = java.util.Collections.synchronizedSet(mutableSetOf())
 
     private var consecutivePlaybackErr = 0
@@ -896,6 +898,12 @@ class MusicService :
                     it.minSongDuration = minSongDuration
                     it.scrobbleDelaySeconds = delaySeconds
                 }
+            }
+
+        database.allBlockedArtistIds()
+            .distinctUntilChanged()
+            .collectLatest(scope) { ids ->
+                blockedArtistIds.value = ids.toSet()
             }
 
         scope.launch(Dispatchers.IO) {
@@ -1758,8 +1766,15 @@ class MusicService :
                             return@onSuccess
                         }
 
-                        automixItems.value = pool
-                        if (pool.isEmpty()) {
+                        val currentBlocked = blockedArtistIds.value
+                        val finalPool = if (currentBlocked.isNotEmpty()) {
+                            pool.filterNot { item ->
+                                item.metadata?.artists?.any { it.id != null && it.id in currentBlocked } == true
+                            }
+                        } else pool
+
+                        automixItems.value = finalPool
+                        if (finalPool.isEmpty()) {
                             automixError.value = getString(R.string.error_no_similar_songs)
                         }
                         automixLoading.value = false
@@ -1833,12 +1848,16 @@ class MusicService :
                             return@onSuccess
                         }
                         val initialQueueIds = (0 until player.mediaItemCount).map { player.getMediaItemAt(it).mediaId }.toSet()
+                        val currentBlocked = blockedArtistIds.value
                         val filteredFromNext =
                             result.items
                                 .map { it.toMediaItem() }
                                 .filter { it.mediaId !in initialQueueIds }
                                 .filterExplicit(hideExplicit)
                                 .filterVideo(hideVideo)
+                                .filterNot { item ->
+                                    currentBlocked.isNotEmpty() && item.metadata?.artists?.any { it.id != null && it.id in currentBlocked } == true
+                                }
 
                         val addedNow = ArrayList<MediaItem>(32)
 
@@ -1863,6 +1882,9 @@ class MusicService :
                                 .filter { it.mediaId !in queueIdsAfterNext }
                                 .filterExplicit(hideExplicit)
                                 .filterVideo(hideVideo)
+                                .filterNot { item ->
+                                    currentBlocked.isNotEmpty() && item.metadata?.artists?.any { it.id != null && it.id in currentBlocked } == true
+                                }
 
                         if (addedNow.isEmpty() && filteredRelated.isNotEmpty()) {
                             val toAdd = filteredRelated.take(25)
@@ -3358,6 +3380,22 @@ class MusicService :
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
     super.onMediaItemTransition(mediaItem, reason)
+
+    val currentMeta = mediaItem?.metadata ?: player.currentMetadata
+    val currentBlocked = blockedArtistIds.value
+    if (currentMeta != null && currentBlocked.isNotEmpty()) {
+        val hasBlockedArtist = currentMeta.artists.any { it.id != null && it.id in currentBlocked }
+        if (hasBlockedArtist) {
+            scope.launch {
+                if (player.hasNextMediaItem()) {
+                    player.seekToNextMediaItem()
+                } else if (player.mediaItemCount > 1) {
+                    player.seekToNext()
+                }
+            }
+            return
+        }
+    }
 
     clearStreamRefreshGuards(
         mediaItem?.mediaId

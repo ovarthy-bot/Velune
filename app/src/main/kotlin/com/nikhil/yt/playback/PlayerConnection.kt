@@ -28,19 +28,22 @@ import com.nikhil.yt.playback.MusicService.MusicBinder
 import com.nikhil.yt.playback.queues.Queue
 import com.nikhil.yt.utils.reportException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PlayerConnection(
     context: Context,
     binder: MusicBinder,
     val database: MusicDatabase,
-    scope: CoroutineScope,
+    val scope: CoroutineScope,
 ) : Player.Listener {
     val service = binder.service
     val player = service.player
@@ -145,6 +148,21 @@ class PlayerConnection(
     fun toggleLike() {
         service.toggleLike()
     }
+
+    fun blockArtist(id: String, name: String, thumbnailUrl: String? = null) {
+        scope.launch(Dispatchers.IO) {
+            database.blockArtist(id, name, thumbnailUrl)
+        }
+    }
+
+    fun unblockArtist(id: String) {
+        scope.launch(Dispatchers.IO) {
+            database.unblockArtist(id)
+        }
+    }
+
+    fun isArtistBlocked(id: String): Flow<Boolean> =
+        database.isArtistBlocked(id)
 
     fun seekToNext() {
         val state = service.togetherSessionState.value as? com.nikhil.yt.together.TogetherSessionState.Joined

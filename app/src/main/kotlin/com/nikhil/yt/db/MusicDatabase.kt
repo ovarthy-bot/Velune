@@ -33,6 +33,7 @@ import com.nikhil.yt.db.entities.AlbumArtistMap
 import com.nikhil.yt.db.entities.AlbumEntity
 import com.nikhil.yt.db.entities.ArtistEntity
 import com.nikhil.yt.db.entities.Event
+import com.nikhil.yt.db.entities.BlockedArtistEntity
 import com.nikhil.yt.db.entities.FormatEntity
 import com.nikhil.yt.db.entities.LyricsEntity
 import com.nikhil.yt.db.entities.PlaylistEntity
@@ -58,7 +59,7 @@ import java.util.concurrent.Executor
 import kotlin.coroutines.resume
 
 private const val TAG = "MusicDatabase"
-private const val CURRENT_VERSION = 28
+private const val CURRENT_VERSION = 29
 
 class MusicDatabase(
     private val delegate: InternalDatabase,
@@ -124,7 +125,8 @@ class MusicDatabase(
         PlayCountEntity::class,
         TagEntity::class,
         PlaylistTagMap::class,
-        com.nikhil.yt.db.entities.SongSkipEntity::class
+        com.nikhil.yt.db.entities.SongSkipEntity::class,
+        BlockedArtistEntity::class
     ],
     views = [
         SortedSongArtistMap::class,

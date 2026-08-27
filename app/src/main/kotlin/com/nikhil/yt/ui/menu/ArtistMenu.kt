@@ -36,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.ListItem
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -212,6 +213,40 @@ fun ArtistMenu(
                     database.transaction {
                         update(artist.artist.toggleLike())
                     }
+                }
+            )
+        }
+
+        // Block / Unblock artist button
+        item {
+            val isBlocked by database.isArtistBlocked(artist.id).collectAsState(initial = false)
+            ListItem(
+                headlineContent = {
+                    Text(
+                        text = if (isBlocked) stringResource(R.string.unblock_artist) else stringResource(R.string.block_artist),
+                        color = if (isBlocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    )
+                },
+                leadingContent = {
+                    Icon(
+                        painter = painterResource(R.drawable.block),
+                        contentDescription = null,
+                        tint = if (isBlocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    )
+                },
+                modifier = Modifier.clickable {
+                    coroutineScope.launch(Dispatchers.IO) {
+                        if (isBlocked) {
+                            database.unblockArtist(artist.id)
+                        } else {
+                            database.blockArtist(
+                                id = artist.id,
+                                name = artist.artist.name,
+                                thumbnailUrl = artist.artist.thumbnailUrl,
+                            )
+                        }
+                    }
+                    onDismiss()
                 }
             )
         }

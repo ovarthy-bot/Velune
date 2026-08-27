@@ -27,9 +27,17 @@ import com.nikhil.yt.utils.dataStore
 import com.nikhil.yt.utils.get
 import com.nikhil.yt.utils.reportException
 import dagger.hilt.android.lifecycle.HiltViewModel
+import com.nikhil.yt.db.MusicDatabase
+import com.nikhil.yt.innertube.models.YTItem
+import com.nikhil.yt.innertube.models.SongItem
+import com.nikhil.yt.innertube.models.ArtistItem
+import com.nikhil.yt.innertube.models.AlbumItem
+import com.nikhil.yt.innertube.pages.SearchSummary
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
@@ -37,6 +45,7 @@ class OnlineSearchViewModel
 @Inject
 constructor(
     @ApplicationContext val context: Context,
+    val database: MusicDatabase,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
     val query = savedStateHandle.get<String>("query")!!
@@ -44,15 +53,35 @@ constructor(
     var summaryPage by mutableStateOf<SearchSummaryPage?>(null)
     val viewStateMap = mutableStateMapOf<String, ItemsPage?>()
 
+    private fun isYtItemAllowed(item: YTItem, blockedIds: Set<String>): Boolean {
+        if (blockedIds.isEmpty()) return true
+        return when (item) {
+            is SongItem -> item.artists.none { it.id != null && it.id in blockedIds }
+            is ArtistItem -> item.id !in blockedIds
+            is AlbumItem -> item.artists.orEmpty().none { it.id != null && it.id in blockedIds }
+            else -> true
+        }
+    }
+
     init {
         viewModelScope.launch {
             filter.collect { filter ->
+                val blockedIds = withContext(Dispatchers.IO) { database.allBlockedArtistIdsSync().toSet() }
                 if (filter == null) {
                     if (summaryPage == null) {
                         YouTube
                             .searchSummary(query)
-                            .onSuccess {
-                                summaryPage = it.filterExplicit(context.dataStore.get(HideExplicitKey, false)).filterVideo(context.dataStore.get(HideVideoKey, false))
+                            .onSuccess { page ->
+                                val filtered = page
+                                    .filterExplicit(context.dataStore.get(HideExplicitKey, false))
+                                    .filterVideo(context.dataStore.get(HideVideoKey, false))
+                                summaryPage = SearchSummaryPage(
+                                    summaries = filtered.summaries.mapNotNull { summary ->
+                                        val allowedItems = summary.items.filter { isYtItemAllowed(it, blockedIds) }
+                                        if (allowedItems.isEmpty()) null
+                                        else SearchSummary(summary.title, allowedItems)
+                                    }
+                                )
                             }.onFailure {
                                 reportException(it)
                             }
@@ -71,7 +100,9 @@ constructor(
                                                     HideExplicitKey,
                                                     false
                                                 )
-                                            ).filterVideo(context.dataStore.get(HideVideoKey, false)),
+                                            )
+                                            .filterVideo(context.dataStore.get(HideVideoKey, false))
+                                            .filter { isYtItemAllowed(it, blockedIds) },
                                         result.continuation,
                                     )
                             }.onFailure {
@@ -90,10 +121,12 @@ constructor(
             val viewState = viewStateMap[filter] ?: return@launch
             val continuation = viewState.continuation
             if (continuation != null) {
+                val blockedIds = withContext(Dispatchers.IO) { database.allBlockedArtistIdsSync().toSet() }
                 val searchResult =
                     YouTube.searchContinuation(continuation).getOrNull() ?: return@launch
+                val newItems = searchResult.items.filter { isYtItemAllowed(it, blockedIds) }
                 viewStateMap[filter] = ItemsPage(
-                    (viewState.items + searchResult.items).distinctBy { it.id },
+                    (viewState.items + newItems).distinctBy { it.id },
                     searchResult.continuation
                 )
             }

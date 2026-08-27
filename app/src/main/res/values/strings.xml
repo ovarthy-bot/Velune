@@ -783,4 +783,14 @@ Velune will only extract your token, and everything else is stored locally.</str
     <string name="token_copied">Token copied to clipboard</string>
     <string name="no_visitor_data">No visitor data available. Tokens cannot be generated.</string>
     <string name="extracting_from_url">Extracting tokens from URL…</string>
+
+    <!-- Artist Blacklist -->
+    <string name="blocked_artists">Blocked artists</string>
+    <string name="blocked_artists_desc">Manage artists you\'ve blocked from recommendations and playback</string>
+    <string name="block_artist">Block artist</string>
+    <string name="unblock_artist">Unblock artist</string>
+    <string name="artist_blocked">Artist blocked</string>
+    <string name="artist_unblocked">Artist unblocked</string>
+    <string name="no_blocked_artists">No blocked artists</string>
+    <string name="no_blocked_artists_desc">Artists you block will appear here. Their songs won\'t appear in search, recommendations, or playback.</string>
 </resources>
