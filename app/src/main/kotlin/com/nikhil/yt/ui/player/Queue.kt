@@ -146,6 +146,7 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 import kotlin.math.roundToInt
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 
 @SuppressLint("UnrememberedMutableState")
 @OptIn(ExperimentalFoundationApi::class)
@@ -610,41 +611,42 @@ fun Queue(
                     ) {
                         val currentItem by rememberUpdatedState(window)
                         val isActive = window.uid == currentPlayingUid
-                        val dismissBoxState =
-                            rememberSwipeToDismissBoxState(
-                                positionalThreshold = { totalDistance -> totalDistance }
-                            )
 
-                        var processedDismiss by remember { mutableStateOf(false) }
-                        LaunchedEffect(dismissBoxState.currentValue) {
-                            val dv = dismissBoxState.currentValue
-                            if (!processedDismiss && (
-                                    dv == SwipeToDismissBoxValue.StartToEnd ||
-                                    dv == SwipeToDismissBoxValue.EndToStart
-                                )
-                            ) {
-                                processedDismiss = true
-                                playerConnection.player.removeMediaItem(currentItem.firstPeriodIndex)
+                        fun removeSongFromQueue(itemWindow: Timeline.Window) {
+                            val removeIndex = itemWindow.firstPeriodIndex
+                            if (playerConnection.player.availableCommands.contains(Player.COMMAND_CHANGE_MEDIA_ITEMS)) {
+                                playerConnection.removeQueueItem(removeIndex)
                                 dismissJob?.cancel()
                                 dismissJob = coroutineScope.launch {
                                     val snackbarResult = snackbarHostState.showSnackbar(
-                                        message = removedFormat.format(currentItem.mediaItem.metadata?.title),
+                                        message = removedFormat.format(itemWindow.mediaItem.metadata?.title),
                                         actionLabel = undoText,
                                         duration = SnackbarDuration.Short,
                                     )
                                     if (snackbarResult == SnackbarResult.ActionPerformed) {
-                                        playerConnection.player.addMediaItem(currentItem.mediaItem)
+                                        playerConnection.player.addMediaItem(itemWindow.mediaItem)
                                         playerConnection.player.moveMediaItem(
                                             mutableQueueWindows.size,
-                                            currentItem.firstPeriodIndex,
+                                            removeIndex,
                                         )
                                     }
                                 }
                             }
-                            if (dv == SwipeToDismissBoxValue.Settled) {
-                                processedDismiss = false
-                            }
                         }
+
+                        val dismissBoxState =
+                            rememberSwipeToDismissBoxState(
+                                confirmValueChange = { value ->
+                                    if (value == SwipeToDismissBoxValue.StartToEnd || value == SwipeToDismissBoxValue.EndToStart) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        removeSongFromQueue(currentItem)
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                },
+                                positionalThreshold = { totalDistance -> totalDistance * 0.35f }
+                            )
 
                         val content: @Composable () -> Unit = {
                             Row(
@@ -675,6 +677,9 @@ fun Queue(
                                                         navController = navController,
                                                         playerBottomSheetState = playerBottomSheetState,
                                                         isQueueTrigger = true,
+                                                        onRemoveFromQueue = {
+                                                            removeSongFromQueue(currentItem)
+                                                        },
                                                         onShowDetailsDialog = {
                                                             window.mediaItem.mediaId.let {
                                                                 bottomSheetPageState.show {
@@ -771,12 +776,70 @@ fun Queue(
                             }
                         }
 
-                        if (effectiveLocked) {
+                        if (selection || togetherForcesLock) {
                             content()
                         } else {
                             SwipeToDismissBox(
                                 state = dismissBoxState,
-                                backgroundContent = {},
+                                enableDismissFromStartToEnd = true,
+                                enableDismissFromEndToStart = true,
+                                backgroundContent = {
+                                    val direction = dismissBoxState.dismissDirection
+                                    val alignment = when (direction) {
+                                        SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
+                                        SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
+                                        SwipeToDismissBoxValue.Settled -> Alignment.Center
+                                    }
+                                    val isDismissing = direction != SwipeToDismissBoxValue.Settled
+
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(
+                                                if (isDismissing) MaterialTheme.colorScheme.errorContainer
+                                                else Color.Transparent
+                                            )
+                                            .padding(horizontal = 20.dp),
+                                        contentAlignment = alignment,
+                                    ) {
+                                        if (isDismissing) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            ) {
+                                                if (direction == SwipeToDismissBoxValue.StartToEnd) {
+                                                    Icon(
+                                                        painter = painterResource(R.drawable.delete),
+                                                        contentDescription = stringResource(R.string.remove_from_queue),
+                                                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                                                        modifier = Modifier.size(22.dp),
+                                                    )
+                                                    Text(
+                                                        text = stringResource(R.string.remove_from_queue),
+                                                        style = MaterialTheme.typography.labelLarge,
+                                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                    )
+                                                } else {
+                                                    Text(
+                                                        text = stringResource(R.string.remove_from_queue),
+                                                        style = MaterialTheme.typography.labelLarge,
+                                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                    )
+                                                    Icon(
+                                                        painter = painterResource(R.drawable.delete),
+                                                        contentDescription = stringResource(R.string.remove_from_queue),
+                                                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                                                        modifier = Modifier.size(22.dp),
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
                             ) {
                                 content()
                             }

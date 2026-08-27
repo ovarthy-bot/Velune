@@ -127,6 +127,21 @@ class PlayerConnection(
         service.addToQueue(items)
     }
 
+    fun removeQueueItem(index: Int) {
+        if (player.isCommandAvailable(Player.COMMAND_CHANGE_MEDIA_ITEMS) && index in 0 until player.mediaItemCount) {
+            player.removeMediaItem(index)
+        }
+    }
+
+    fun removeQueueItems(indices: List<Int>) {
+        if (!player.isCommandAvailable(Player.COMMAND_CHANGE_MEDIA_ITEMS)) return
+        indices.sortedDescending().forEach { index ->
+            if (index in 0 until player.mediaItemCount) {
+                player.removeMediaItem(index)
+            }
+        }
+    }
+
     fun toggleLike() {
         service.toggleLike()
     }
