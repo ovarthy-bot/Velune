@@ -101,8 +101,12 @@ import com.nikhil.yt.innertube.models.WatchEndpoint
 import com.nikhil.yt.LocalDatabase
 import com.nikhil.yt.LocalDownloadUtil
 import com.nikhil.yt.LocalPlayerConnection
+import com.nikhil.yt.LocalSnackbarHostState
 import com.nikhil.yt.R
 import com.nikhil.yt.constants.ArtistSeparatorsKey
+import com.nikhil.yt.ui.component.ArtistSelectionItem
+import com.nikhil.yt.ui.component.BlockArtistDialog
+import com.nikhil.yt.ui.component.blockArtistWithUndo
 import com.nikhil.yt.constants.EqualizerBandLevelsMbKey
 import com.nikhil.yt.constants.EqualizerBassBoostEnabledKey
 import com.nikhil.yt.constants.EqualizerBassBoostStrengthKey
@@ -155,6 +159,7 @@ fun PlayerMenu(
     val activityResultLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
     val librarySong by database.song(mediaMetadata.id).collectAsState(initial = null)
+    val snackbarHostState = LocalSnackbarHostState.current
     val coroutineScope = rememberCoroutineScope()
 
     val download by LocalDownloadUtil.current.getDownload(mediaMetadata.id)
@@ -194,6 +199,33 @@ fun PlayerMenu(
 
     var showChoosePlaylistDialog by rememberSaveable {
         mutableStateOf(false)
+    }
+
+    var showBlockArtistDialog by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    if (showBlockArtistDialog) {
+        val blockableArtists = remember(mediaMetadata.artists) {
+            mediaMetadata.artists.mapNotNull { it.id?.let { id -> ArtistSelectionItem(id = id, name = it.name, thumbnailUrl = it.thumbnailUrl) } }
+        }
+        BlockArtistDialog(
+            artists = blockableArtists,
+            onArtistSelected = { selectedArtist ->
+                showBlockArtistDialog = false
+                onDismiss()
+                blockArtistWithUndo(
+                    context = context,
+                    database = database,
+                    snackbarHostState = snackbarHostState,
+                    coroutineScope = coroutineScope,
+                    artistId = selectedArtist.id,
+                    artistName = selectedArtist.name,
+                    thumbnailUrl = selectedArtist.thumbnailUrl,
+                )
+            },
+            onDismiss = { showBlockArtistDialog = false }
+        )
     }
 
     AddToPlaylistDialog(
@@ -578,9 +610,11 @@ fun PlayerMenu(
                             )
                         }
 
-                        val primaryArtist = mediaMetadata.artists.firstOrNull { it.id != null }
-                        if (primaryArtist?.id != null) {
-                            val isPrimaryArtistBlocked by database.isArtistBlocked(primaryArtist.id).collectAsState(initial = false)
+                        val validArtists = mediaMetadata.artists.filter { it.id != null }
+                        if (validArtists.isNotEmpty()) {
+                            val singleArtist = if (validArtists.size == 1) validArtists.first() else null
+                            val isSingleBlocked by (if (singleArtist != null) database.isArtistBlocked(singleArtist.id!!) else kotlinx.coroutines.flow.flowOf(false)).collectAsState(initial = false)
+
                             HorizontalDivider(
                                 modifier = Modifier.padding(start = 56.dp),
                                 color = MaterialTheme.colorScheme.outlineVariant,
@@ -588,30 +622,40 @@ fun PlayerMenu(
                             ListItem(
                                 headlineContent = {
                                     Text(
-                                        text = if (isPrimaryArtistBlocked) stringResource(R.string.unblock_artist) else stringResource(R.string.block_artist),
-                                        color = if (isPrimaryArtistBlocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                        text = if (isSingleBlocked) stringResource(R.string.unblock_artist) else stringResource(R.string.block_artist),
+                                        color = if (isSingleBlocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                                     )
                                 },
                                 leadingContent = {
                                     Icon(
                                         painter = painterResource(R.drawable.block),
                                         contentDescription = null,
-                                        tint = if (isPrimaryArtistBlocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                        tint = if (isSingleBlocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                                     )
                                 },
                                 modifier = Modifier.clickable {
-                                    coroutineScope.launch(Dispatchers.IO) {
-                                        if (isPrimaryArtistBlocked) {
-                                            database.unblockArtist(primaryArtist.id)
+                                    if (validArtists.size == 1) {
+                                        val single = validArtists.first()
+                                        if (isSingleBlocked) {
+                                            coroutineScope.launch(Dispatchers.IO) {
+                                                database.unblockArtist(single.id!!)
+                                            }
+                                            onDismiss()
                                         } else {
-                                            database.blockArtist(
-                                                id = primaryArtist.id,
-                                                name = primaryArtist.name,
-                                                thumbnailUrl = primaryArtist.thumbnailUrl,
+                                            onDismiss()
+                                            blockArtistWithUndo(
+                                                context = context,
+                                                database = database,
+                                                snackbarHostState = snackbarHostState,
+                                                coroutineScope = coroutineScope,
+                                                artistId = single.id!!,
+                                                artistName = single.name,
+                                                thumbnailUrl = single.thumbnailUrl,
                                             )
                                         }
+                                    } else {
+                                        showBlockArtistDialog = true
                                     }
-                                    onDismiss()
                                 },
                                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                             )

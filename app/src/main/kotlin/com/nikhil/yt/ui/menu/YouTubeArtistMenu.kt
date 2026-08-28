@@ -50,12 +50,17 @@ import androidx.compose.ui.unit.dp
 import com.nikhil.yt.innertube.models.ArtistItem
 import com.nikhil.yt.LocalDatabase
 import com.nikhil.yt.LocalPlayerConnection
+import com.nikhil.yt.LocalSnackbarHostState
 import com.nikhil.yt.R
 import com.nikhil.yt.db.entities.ArtistEntity
 import com.nikhil.yt.playback.queues.YouTubeQueue
 import com.nikhil.yt.ui.component.NewAction
 import com.nikhil.yt.ui.component.NewActionGrid
 import com.nikhil.yt.ui.component.YouTubeListItem
+import com.nikhil.yt.ui.component.blockArtistWithUndo
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,7 +71,10 @@ fun YouTubeArtistMenu(
     val context = LocalContext.current
     val database = LocalDatabase.current
     val playerConnection = LocalPlayerConnection.current ?: return
+    val snackbarHostState = LocalSnackbarHostState.current
+    val coroutineScope = rememberCoroutineScope()
     val libraryArtist by database.artist(artist.id).collectAsState(initial = null)
+    val isBlocked by database.isArtistBlocked(artist.id).collectAsState(initial = false)
 
     YouTubeListItem(
         item = artist,
@@ -196,6 +204,43 @@ fun YouTubeArtistMenu(
                             )
                         }
                     }
+                }
+            )
+        }
+
+        // Block / Unblock artist button
+        item {
+            ListItem(
+                headlineContent = {
+                    Text(
+                        text = if (isBlocked) stringResource(R.string.unblock_artist) else stringResource(R.string.block_artist),
+                        color = if (isBlocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    )
+                },
+                leadingContent = {
+                    Icon(
+                        painter = painterResource(R.drawable.block),
+                        contentDescription = null,
+                        tint = if (isBlocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    )
+                },
+                modifier = Modifier.clickable {
+                    if (isBlocked) {
+                        coroutineScope.launch(Dispatchers.IO) {
+                            database.unblockArtist(artist.id)
+                        }
+                    } else {
+                        blockArtistWithUndo(
+                            context = context,
+                            database = database,
+                            snackbarHostState = snackbarHostState,
+                            coroutineScope = coroutineScope,
+                            artistId = artist.id,
+                            artistName = artist.title,
+                            thumbnailUrl = artist.thumbnail,
+                        )
+                    }
+                    onDismiss()
                 }
             )
         }

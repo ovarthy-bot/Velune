@@ -48,6 +48,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.nikhil.yt.LocalDatabase
 import com.nikhil.yt.LocalPlayerConnection
+import com.nikhil.yt.LocalSnackbarHostState
 import com.nikhil.yt.R
 import com.nikhil.yt.constants.ArtistSongSortType
 import com.nikhil.yt.db.entities.Artist
@@ -56,6 +57,7 @@ import com.nikhil.yt.playback.queues.ListQueue
 import com.nikhil.yt.ui.component.ArtistListItem
 import com.nikhil.yt.ui.component.NewAction
 import com.nikhil.yt.ui.component.NewActionGrid
+import com.nikhil.yt.ui.component.blockArtistWithUndo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -70,6 +72,7 @@ fun ArtistMenu(
 ) {
     val context = LocalContext.current
     val database = LocalDatabase.current
+    val snackbarHostState = LocalSnackbarHostState.current
     val playerConnection = LocalPlayerConnection.current ?: return
     val artistState = database.artist(originalArtist.id).collectAsState(initial = originalArtist)
     val artist = artistState.value ?: originalArtist
@@ -235,16 +238,20 @@ fun ArtistMenu(
                     )
                 },
                 modifier = Modifier.clickable {
-                    coroutineScope.launch(Dispatchers.IO) {
-                        if (isBlocked) {
+                    if (isBlocked) {
+                        coroutineScope.launch(Dispatchers.IO) {
                             database.unblockArtist(artist.id)
-                        } else {
-                            database.blockArtist(
-                                id = artist.id,
-                                name = artist.artist.name,
-                                thumbnailUrl = artist.artist.thumbnailUrl,
-                            )
                         }
+                    } else {
+                        blockArtistWithUndo(
+                            context = context,
+                            database = database,
+                            snackbarHostState = snackbarHostState,
+                            coroutineScope = coroutineScope,
+                            artistId = artist.id,
+                            artistName = artist.artist.name,
+                            thumbnailUrl = artist.artist.thumbnailUrl,
+                        )
                     }
                     onDismiss()
                 }

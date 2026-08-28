@@ -17,6 +17,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -47,6 +48,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarHost
@@ -100,6 +102,7 @@ import coil3.request.allowHardware
 import coil3.size.Size
 import coil3.toBitmap
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.nikhil.yt.LocalDatabase
 import com.nikhil.yt.LocalPlayerAwareWindowInsets
@@ -127,6 +130,7 @@ import com.nikhil.yt.ui.component.NavigationTitle
 import com.nikhil.yt.ui.component.SongListItem
 import com.nikhil.yt.ui.component.YouTubeGridItem
 import com.nikhil.yt.ui.component.YouTubeListItem
+import com.nikhil.yt.ui.component.blockArtistWithUndo
 import com.nikhil.yt.ui.component.shimmer.ButtonPlaceholder
 import com.nikhil.yt.ui.component.shimmer.ListItemPlaceHolder
 import com.nikhil.yt.ui.component.shimmer.ShimmerHost
@@ -141,6 +145,7 @@ import com.nikhil.yt.ui.theme.PlayerColorExtractor
 import com.nikhil.yt.ui.utils.backToMain
 import com.nikhil.yt.ui.utils.resize
 import com.nikhil.yt.utils.rememberPreference
+import com.nikhil.yt.utils.reportException
 import com.nikhil.yt.viewmodels.ArtistViewModel
 import com.valentinilk.shimmer.shimmer
 
@@ -163,6 +168,7 @@ fun ArtistScreen(
     val libraryArtist by viewModel.libraryArtist.collectAsState()
     val librarySongs by viewModel.librarySongs.collectAsState()
     val libraryAlbums by viewModel.libraryAlbums.collectAsState()
+    val isBlocked by viewModel.isBlocked.collectAsState()
     val hideExplicit by rememberPreference(key = HideExplicitKey, defaultValue = false)
     val (disableBlur) = rememberPreference(DisableBlurKey, false)
 
@@ -703,7 +709,7 @@ fun ArtistScreen(
                                     shape = RoundedCornerShape(24.dp),
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 24.dp, vertical = 8.dp)
+                                        .padding(horizontal = 24.dp, vertical = 4.dp)
                                         .height(44.dp)
                                 ) {
                                     Icon(
@@ -715,6 +721,58 @@ fun ArtistScreen(
                                     Text(text = stringResource(R.string.radio))
                                 }
                             }
+                        }
+
+                        // Block / Unblock Artist Button
+                        OutlinedButton(
+                            onClick = {
+                                if (isBlocked) {
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        database.unblockArtist(viewModel.artistId)
+                                    }
+                                } else {
+                                    val name = artistPage?.artist?.title ?: libraryArtist?.artist?.name ?: ""
+                                    blockArtistWithUndo(
+                                        context = context,
+                                        database = database,
+                                        snackbarHostState = snackbarHostState,
+                                        coroutineScope = coroutineScope,
+                                        artistId = viewModel.artistId,
+                                        artistName = name,
+                                        thumbnailUrl = thumbnail,
+                                    )
+                                }
+                            },
+                            colors = if (isBlocked) {
+                                ButtonDefaults.outlinedButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                                )
+                            } else {
+                                ButtonDefaults.outlinedButtonColors()
+                            },
+                            border = if (isBlocked) {
+                                BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                            } else {
+                                ButtonDefaults.outlinedButtonBorder
+                            },
+                            shape = RoundedCornerShape(24.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp, vertical = 4.dp)
+                                .height(44.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.block),
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = if (isBlocked) MaterialTheme.colorScheme.error else LocalContentColor.current,
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = stringResource(if (isBlocked) R.string.blocked else R.string.block_artist),
+                                color = if (isBlocked) MaterialTheme.colorScheme.error else LocalContentColor.current,
+                            )
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
@@ -1134,6 +1192,35 @@ fun ArtistScreen(
                 Icon(
                     painter = painterResource(R.drawable.share),
                     contentDescription = null
+                )
+            }
+
+            // Block / Unblock IconButton
+            IconButton(
+                onClick = {
+                    if (isBlocked) {
+                        coroutineScope.launch(Dispatchers.IO) {
+                            database.unblockArtist(viewModel.artistId)
+                        }
+                    } else {
+                        val name = artistPage?.artist?.title ?: libraryArtist?.artist?.name ?: ""
+                        blockArtistWithUndo(
+                            context = context,
+                            database = database,
+                            snackbarHostState = snackbarHostState,
+                            coroutineScope = coroutineScope,
+                            artistId = viewModel.artistId,
+                            artistName = name,
+                            thumbnailUrl = thumbnail,
+                        )
+                    }
+                },
+                onLongClick = {},
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.block),
+                    contentDescription = stringResource(if (isBlocked) R.string.unblock_artist else R.string.block_artist),
+                    tint = if (isBlocked) MaterialTheme.colorScheme.error else LocalContentColor.current,
                 )
             }
         },

@@ -36,21 +36,32 @@ constructor(
 ) : ViewModel() {
     val query = MutableStateFlow("")
     val filter = MutableStateFlow(LocalFilter.ALL)
+    private val blockedArtistIds = database.allBlockedArtistIds().map { it.toSet() }
+
+    private fun isLocalItemAllowed(item: LocalItem, blockedIds: Set<String>): Boolean {
+        if (blockedIds.isEmpty()) return true
+        return when (item) {
+            is Song -> item.artists.none { it.id in blockedIds }
+            is Artist -> item.id !in blockedIds
+            is Album -> item.artists.none { it.id in blockedIds }
+            is Playlist -> true
+        }
+    }
 
     val result =
-        combine(query, filter) { query, filter ->
-            query to filter
-        }.flatMapLatest { (query, filter) ->
+        combine(query, filter, blockedArtistIds) { query, filter, blockedIds ->
+            Triple(query, filter, blockedIds)
+        }.flatMapLatest { (query, filter, blockedIds) ->
             if (query.isEmpty()) {
                 flowOf(LocalSearchResult("", filter, emptyMap()))
             } else {
-                when (filter) {
+                val baseFlow = when (filter) {
                     LocalFilter.ALL ->
                         combine(
-                            database.searchSongs(query, PREVIEW_SIZE),
-                            database.searchAlbums(query, PREVIEW_SIZE),
-                            database.searchArtists(query, PREVIEW_SIZE),
-                            database.searchPlaylists(query, PREVIEW_SIZE),
+                            database.searchSongs(query, PREVIEW_SIZE * 2),
+                            database.searchAlbums(query, PREVIEW_SIZE * 2),
+                            database.searchArtists(query, PREVIEW_SIZE * 2),
+                            database.searchPlaylists(query, PREVIEW_SIZE * 2),
                         ) { songs, albums, artists, playlists ->
                             songs + albums + artists + playlists
                         }
@@ -59,12 +70,27 @@ constructor(
                     LocalFilter.ALBUM -> database.searchAlbums(query)
                     LocalFilter.ARTIST -> database.searchArtists(query)
                     LocalFilter.PLAYLIST -> database.searchPlaylists(query)
-                }.map { list ->
+                }
+                baseFlow.map { list ->
+                    val filteredList = list.filter { isLocalItemAllowed(it, blockedIds) }
+                    val finalList = if (filter == LocalFilter.ALL) {
+                        val grouped = filteredList.groupBy {
+                            when (it) {
+                                is Song -> LocalFilter.SONG
+                                is Album -> LocalFilter.ALBUM
+                                is Artist -> LocalFilter.ARTIST
+                                is Playlist -> LocalFilter.PLAYLIST
+                            }
+                        }
+                        grouped.values.flatMap { it.take(PREVIEW_SIZE) }
+                    } else {
+                        filteredList
+                    }
                     LocalSearchResult(
                         query = query,
                         filter = filter,
                         map =
-                        list.groupBy {
+                        finalList.groupBy {
                             when (it) {
                                 is Song -> LocalFilter.SONG
                                 is Album -> LocalFilter.ALBUM

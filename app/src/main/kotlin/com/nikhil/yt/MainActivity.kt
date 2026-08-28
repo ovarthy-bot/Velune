@@ -73,6 +73,8 @@ import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SearchBarDefaults
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
@@ -1014,6 +1016,8 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
+                    val snackbarHostState = remember { SnackbarHostState() }
+
                     CompositionLocalProvider(
                         LocalDatabase provides database,
                         LocalContentColor provides if (pureBlack) Color.White else contentColorFor(MaterialTheme.colorScheme.surface),
@@ -1024,6 +1028,7 @@ class MainActivity : ComponentActivity() {
                         LocalSyncUtils provides syncUtils,
                         LocalBottomSheetPageState provides bottomSheetPageState,
                         LocalMenuState provides menuState,
+                        LocalSnackbarHostState provides snackbarHostState,
                     ) {
                         Row {
                             AnimatedVisibility(useRail && shouldShowNavigationBar) {
@@ -1086,6 +1091,12 @@ class MainActivity : ComponentActivity() {
                             }
 
                             Scaffold(
+                                snackbarHost = {
+                                    SnackbarHost(
+                                        hostState = snackbarHostState,
+                                        modifier = Modifier.padding(bottom = if (!playerBottomSheetState.isDismissed && !useRail) MiniPlayerHeight else 0.dp)
+                                    )
+                                },
                                 topBar = {
                                     if (shouldShowTopBar) {
                                         val isTransparentTopBarScreen = navBackStackEntry?.destination?.route in listOf(
@@ -1703,3 +1714,4 @@ val LocalPlayerAwareWindowInsets =
     compositionLocalOf<WindowInsets> { error("No WindowInsets provided") }
 val LocalDownloadUtil = staticCompositionLocalOf<DownloadUtil> { error("No DownloadUtil provided") }
 val LocalSyncUtils = staticCompositionLocalOf<SyncUtils> { error("No SyncUtils provided") }
+val LocalSnackbarHostState = staticCompositionLocalOf<SnackbarHostState> { error("No SnackbarHostState provided") }

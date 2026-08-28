@@ -54,10 +54,14 @@ constructor(
                         }
                     }
                 }
+                val blockedIds = database.allBlockedArtistIdsSync().toSet()
                 explorePage.value =
                     page.copy(
                         newReleaseAlbums =
                         page.newReleaseAlbums
+                            .filter { album ->
+                                album.artists.orEmpty().none { it.id != null && it.id in blockedIds }
+                            }
                             .sortedBy { album ->
                                 val artistIds = album.artists.orEmpty().mapNotNull { it.id }
                                 val firstArtistKey =

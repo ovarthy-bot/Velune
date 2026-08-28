@@ -903,7 +903,18 @@ class MusicService :
         database.allBlockedArtistIds()
             .distinctUntilChanged()
             .collectLatest(scope) { ids ->
-                blockedArtistIds.value = ids.toSet()
+                val set = ids.toSet()
+                blockedArtistIds.value = set
+                if (set.isNotEmpty()) {
+                    val currentMeta = player.currentMetadata
+                    if (currentMeta != null && currentMeta.artists.any { it.id != null && it.id in set }) {
+                        if (player.hasNextMediaItem()) {
+                            player.seekToNextMediaItem()
+                        } else if (player.mediaItemCount > 1) {
+                            player.seekToNext()
+                        }
+                    }
+                }
             }
 
         scope.launch(Dispatchers.IO) {
@@ -1468,10 +1479,20 @@ class MusicService :
             player.playWhenReady = playWhenReady
         }
         scope.launch(SilentHandler) {
-            val initialStatus =
+            val currentBlocked = blockedArtistIds.value
+            val initialStatusRaw =
                 withContext(Dispatchers.IO) {
                     queue.getInitialStatus().filterExplicit(dataStore.get(HideExplicitKey, false)).filterVideo(dataStore.get(HideVideoKey, false))
                 }
+            val initialStatus = if (currentBlocked.isNotEmpty()) {
+                initialStatusRaw.copy(
+                    items = initialStatusRaw.items.filterNot { item ->
+                        item.metadata?.artists?.any { it.id != null && it.id in currentBlocked } == true
+                    }
+                )
+            } else {
+                initialStatusRaw
+            }
             if (initialStatus.title != null) {
                 queueTitle = initialStatus.title
             }

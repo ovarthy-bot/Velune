@@ -628,4 +628,8 @@
     <string name="artist_unblocked">Sanatçının engeli kaldırıldı</string>
     <string name="no_blocked_artists">Engellenen sanatçı yok</string>
     <string name="no_blocked_artists_desc">Engellediğiniz sanatçılar burada görünür. Parçaları arama, öneri veya çalma sırasında yer almaz.</string>
+    <string name="which_artist_to_block">Hangi sanatçıyı engellemek istiyorsunuz?</string>
+    <string name="artist_blocked_snackbar">%s kara listeye eklendi.</string>
+    <string name="blocked">Engellendi</string>
+    <string name="block">Engelle</string>
 </resources>

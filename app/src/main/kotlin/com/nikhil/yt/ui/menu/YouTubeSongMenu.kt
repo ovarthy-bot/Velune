@@ -80,11 +80,15 @@ import com.nikhil.yt.models.MediaMetadata
 import com.nikhil.yt.models.toMediaMetadata
 import com.nikhil.yt.playback.ExoDownloadService
 import com.nikhil.yt.playback.queues.YouTubeQueue
+import com.nikhil.yt.LocalSnackbarHostState
+import com.nikhil.yt.ui.component.ArtistSelectionItem
+import com.nikhil.yt.ui.component.BlockArtistDialog
 import com.nikhil.yt.ui.component.ListDialog
 import com.nikhil.yt.ui.component.ListItem
 import com.nikhil.yt.ui.component.LocalBottomSheetPageState
 import com.nikhil.yt.ui.component.NewAction
 import com.nikhil.yt.ui.component.NewActionGrid
+import com.nikhil.yt.ui.component.blockArtistWithUndo
 import com.nikhil.yt.ui.utils.ShowMediaInfo
 import com.nikhil.yt.utils.joinByBullet
 import com.nikhil.yt.utils.makeTimeString
@@ -105,6 +109,7 @@ fun YouTubeSongMenu(
     val playerConnection = LocalPlayerConnection.current ?: return
     val librarySong by database.song(song.id).collectAsState(initial = null)
     val download by LocalDownloadUtil.current.getDownload(song.id).collectAsState(initial = null)
+    val snackbarHostState = LocalSnackbarHostState.current
     val coroutineScope = rememberCoroutineScope()
     val syncUtils = LocalSyncUtils.current
     val artists = remember {
@@ -210,8 +215,35 @@ fun YouTubeSongMenu(
                     }  
                 }  
             }  
-        }  
+        }
     }  
+
+    var showBlockArtistDialog by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    if (showBlockArtistDialog) {
+        val blockableArtists = remember(song.artists) {
+            song.artists.mapNotNull { it.id?.let { id -> ArtistSelectionItem(id = id, name = it.name, thumbnailUrl = null) } }
+        }
+        BlockArtistDialog(
+            artists = blockableArtists,
+            onArtistSelected = { selectedArtist ->
+                showBlockArtistDialog = false
+                onDismiss()
+                blockArtistWithUndo(
+                    context = context,
+                    database = database,
+                    snackbarHostState = snackbarHostState,
+                    coroutineScope = coroutineScope,
+                    artistId = selectedArtist.id,
+                    artistName = selectedArtist.name,
+                    thumbnailUrl = selectedArtist.thumbnailUrl,
+                )
+            },
+            onDismiss = { showBlockArtistDialog = false }
+        )
+    }
 
     ListItem(  
         headlineContent = {
@@ -512,6 +544,43 @@ fun YouTubeSongMenu(
                     modifier = Modifier.clickable {
                         navController.navigate("album/${album.id}")
                         onDismiss()
+                    }
+                )
+            }
+        }
+        if (song.artists.any { it.id != null }) {
+            item {
+                ListItem(
+                    headlineContent = {
+                        Text(
+                            text = stringResource(R.string.block_artist),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    },
+                    leadingContent = {
+                        Icon(
+                            painter = painterResource(R.drawable.block),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        val validArtists = song.artists.filter { it.id != null }
+                        if (validArtists.size == 1) {
+                            val single = validArtists.first()
+                            onDismiss()
+                            blockArtistWithUndo(
+                                context = context,
+                                database = database,
+                                snackbarHostState = snackbarHostState,
+                                coroutineScope = coroutineScope,
+                                artistId = single.id!!,
+                                artistName = single.name,
+                                thumbnailUrl = null,
+                            )
+                        } else if (validArtists.size > 1) {
+                            showBlockArtistDialog = true
+                        }
                     }
                 )
             }

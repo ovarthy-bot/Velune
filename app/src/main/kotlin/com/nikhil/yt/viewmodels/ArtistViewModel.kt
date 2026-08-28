@@ -48,6 +48,8 @@ class ArtistViewModel @Inject constructor(
     var artistPage by mutableStateOf<ArtistPage?>(null)
     val libraryArtist = database.artist(artistId)
         .stateIn(viewModelScope, SharingStarted.Lazily, null)
+    val isBlocked = database.isArtistBlocked(artistId)
+        .stateIn(viewModelScope, SharingStarted.Lazily, false)
     val librarySongs = context.dataStore.data
         .map { it[HideExplicitKey] ?: false }
         .distinctUntilChanged()

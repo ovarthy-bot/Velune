@@ -96,6 +96,9 @@ import com.nikhil.yt.extensions.toMediaItem
 import com.nikhil.yt.models.toMediaMetadata
 import com.nikhil.yt.playback.ExoDownloadService
 import com.nikhil.yt.playback.queues.YouTubeQueue
+import com.nikhil.yt.LocalSnackbarHostState
+import com.nikhil.yt.ui.component.ArtistSelectionItem
+import com.nikhil.yt.ui.component.BlockArtistDialog
 import com.nikhil.yt.ui.component.ListDialog
 import com.nikhil.yt.ui.component.LocalBottomSheetPageState
 import com.nikhil.yt.ui.component.MenuSurfaceSection
@@ -103,6 +106,7 @@ import com.nikhil.yt.ui.component.NewAction
 import com.nikhil.yt.ui.component.NewActionGrid
 import com.nikhil.yt.ui.component.SongListItem
 import com.nikhil.yt.ui.component.TextFieldDialog
+import com.nikhil.yt.ui.component.blockArtistWithUndo
 import com.nikhil.yt.ui.utils.ShowMediaInfo
 import com.nikhil.yt.utils.rememberPreference
 import com.nikhil.yt.viewmodels.CachePlaylistViewModel
@@ -128,6 +132,7 @@ fun SongMenu(
     val song = songState.value ?: originalSong
     val download by LocalDownloadUtil.current.getDownload(originalSong.id)
         .collectAsState(initial = null)
+    val snackbarHostState = LocalSnackbarHostState.current
     val coroutineScope = rememberCoroutineScope()
     val syncUtils = LocalSyncUtils.current
     var refetchIconDegree by remember { mutableFloatStateOf(0f) }
@@ -296,6 +301,34 @@ fun SongMenu(
 
     var showSelectArtistDialog by rememberSaveable {
         mutableStateOf(false)
+    }
+
+    var showBlockArtistDialog by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    if (showBlockArtistDialog) {
+        val blockableArtists = remember(orderedArtists, song.artists) {
+            val list = if (orderedArtists.isNotEmpty()) orderedArtists else song.artists
+            list.map { ArtistSelectionItem(id = it.id, name = it.name, thumbnailUrl = it.thumbnailUrl) }
+        }
+        BlockArtistDialog(
+            artists = blockableArtists,
+            onArtistSelected = { selectedArtist ->
+                showBlockArtistDialog = false
+                onDismiss()
+                blockArtistWithUndo(
+                    context = context,
+                    database = database,
+                    snackbarHostState = snackbarHostState,
+                    coroutineScope = coroutineScope,
+                    artistId = selectedArtist.id,
+                    artistName = selectedArtist.name,
+                    thumbnailUrl = selectedArtist.thumbnailUrl,
+                )
+            },
+            onDismiss = { showBlockArtistDialog = false }
+        )
     }
 
     if (showSelectArtistDialog) {
@@ -792,6 +825,47 @@ fun SongMenu(
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                         )
                     }
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 56.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                    )
+
+                    ListItem(
+                        headlineContent = {
+                            Text(
+                                text = stringResource(R.string.block_artist),
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        },
+                        leadingContent = {
+                            Icon(
+                                painter = painterResource(R.drawable.block),
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        },
+                        modifier =
+                            Modifier.clickable {
+                                val artistsList = if (orderedArtists.isNotEmpty()) orderedArtists else song.artists
+                                if (artistsList.size <= 1 && artistsList.isNotEmpty()) {
+                                    val single = artistsList.first()
+                                    onDismiss()
+                                    blockArtistWithUndo(
+                                        context = context,
+                                        database = database,
+                                        snackbarHostState = snackbarHostState,
+                                        coroutineScope = coroutineScope,
+                                        artistId = single.id,
+                                        artistName = single.name,
+                                        thumbnailUrl = single.thumbnailUrl,
+                                    )
+                                } else if (artistsList.size > 1) {
+                                    showBlockArtistDialog = true
+                                }
+                            },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    )
                 }
             }
         }
