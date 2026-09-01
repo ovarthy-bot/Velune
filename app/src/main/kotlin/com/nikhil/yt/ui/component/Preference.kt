@@ -375,7 +375,7 @@ fun CrossfadeSliderPreference(
             },
             onDismiss = { showDialog = false },
             onConfirm = {
-                val rounded = sliderValue.roundToInt().coerceIn(0, 10)
+                val rounded = sliderValue.roundToInt().coerceIn(0, 20)
                 sliderValue = rounded.toFloat()
                 showDialog = false
                 onValueChange.invoke(rounded)
@@ -389,7 +389,7 @@ fun CrossfadeSliderPreference(
             },
             content = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    val rounded = sliderValue.roundToInt().coerceIn(0, 10)
+                    val rounded = sliderValue.roundToInt().coerceIn(0, 20)
                     Text(
                         text =
                         if (rounded == 0) {
@@ -416,9 +416,9 @@ fun CrossfadeSliderPreference(
 
                     Slider(
                         value = sliderValue,
-                        onValueChange = { sliderValue = it.coerceIn(0f, 10f) },
-                        valueRange = 0f..10f,
-                        steps = 9,
+                        onValueChange = { sliderValue = it.coerceIn(0f, 20f) },
+                        valueRange = 0f..20f,
+                        steps = 19,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
