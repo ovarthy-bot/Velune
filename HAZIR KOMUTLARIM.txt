@@ -1,0 +1,10 @@
+flutter clean
+flutter upgrade
+flutter build apk --release
+flutter build windows --release
+
+flutter run -d Windows
+flutter run -d R5CX10WKH5J
+
+
+flutter install -d R5CX10WKH5J
